@@ -78,7 +78,7 @@ def getPagesFile(file_url):
 def downloadPages(response_json, book_file_name):
 
     extract_to = store_file_path + book_file_name
-    print(extract_to)
+
     # Create a directory for extraction
     if not os.path.exists(extract_to):
         os.makedirs(extract_to)
