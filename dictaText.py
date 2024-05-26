@@ -6,22 +6,26 @@ import re
 import time
 from collections import Counter
 from zipfile import ZipFile
+import configparser
 
-START_INDEX = -20
-END_INDEX = 11
-COMMON_WORDS_DELETE = 1
-COUNTED_WORD_DISPLAY = 20
+config = configparser.ConfigParser()
+config.read('config.ini')
+
+download_path = config['paths']['downloads']
+store_file_path = config['paths']['store_files']
+
+START_INDEX = config.getint('indexes', 'START_INDEX')
+END_INDEX = config.getint('indexes', 'END_INDEX')
+COMMON_WORDS_DELETE = config.getint('indexes', 'COMMON_WORDS_DELETE')
+COUNTED_WORD_DISPLAY = config.getint('indexes', 'COUNTED_WORD_DISPLAY')
 
 # initialize counter dictionary
 books_dict = {}
-
 common_word_count = Counter()
 
 
 def parseBook(book, starter_word_count, closer_word_count):
     common_word_count = Counter()
-    starter_word_count = Counter()
-    closer_word_count = Counter()
 
     # get json pages file
     response_json = getPagesFile('https://files.dicta.org.il/' + book['fileName'] + '/pages.json')
@@ -73,8 +77,8 @@ def getPagesFile(file_url):
 
 def downloadPages(response_json, book_file_name):
 
-    extract_to = 'C:/Users/rinag/VSCoding/Dicta/BE/DictaBE/' + book_file_name
-
+    extract_to = store_file_path + book_file_name
+    print(extract_to)
     # Create a directory for extraction
     if not os.path.exists(extract_to):
         os.makedirs(extract_to)
@@ -85,9 +89,16 @@ def downloadPages(response_json, book_file_name):
             continue
         filename = page['fileName']
         file_url = 'https://files.dicta.org.il/' + book['fileName'] + '/' + filename
-        file_path = 'C:/Users/rinag/Downloads/' + filename
-
+        file_path = download_path + filename
+       # print(file_path)
+        file_json = re.sub('zip$', 'json', filename)
+        path_json = store_file_path + book['fileName'] + '/' + file_json
+       # print(path_json)
         # Check if the file already exists
+        if os.path.exists(path_json):
+            downloaded = True
+            continue
+
         if not os.path.exists(file_path):
             downloaded = False
             # Download the file using requests
@@ -109,7 +120,7 @@ def downloadPages(response_json, book_file_name):
         if not os.path.exists(extract_to + '/' + filename_json):
             with ZipFile(file_path, 'r') as zip_obj:
                 zip_obj.extractall(extract_to)
-    print ('downloads completed successfully!' if not downloaded else 'book already downloaded!')
+    print('downloads completed successfully!' if not downloaded else 'book already downloaded!')
     return extract_to
 
 
@@ -132,7 +143,7 @@ def newPage(response_json, page_name):
     if not found_file:
         print("Page not found")
         exit(1)
-    file_path = 'C:/Users/rinag/Downloads/' + filename
+    file_path = download_path + filename
     webbrowser.open('https://files.dicta.org.il/prietshaim/' + filename)
 
     # waiting for download to complete
