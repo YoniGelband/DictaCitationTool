@@ -11,8 +11,8 @@ import configparser
 config = configparser.ConfigParser()
 config.read('config.ini')
 
-download_path = config['paths']['downloads']
-store_file_path = config['paths']['store_files']
+DOWNLOAD_PATH = config['paths']['downloads']
+STORE_FILE_PATH = config['paths']['store_files']
 
 START_INDEX = config.getint('indexes', 'START_INDEX')
 END_INDEX = config.getint('indexes', 'END_INDEX')
@@ -24,20 +24,20 @@ books_dict = {}
 common_word_count = Counter()
 
 
-def parseBook(book, starter_word_count, closer_word_count):
+def parseBook(book):
+    starter_word_count = Counter()
+    closer_word_count = Counter()
     common_word_count = Counter()
 
     # get json pages file
-    response_json = getPagesFile('https://files.dicta.org.il/' + book['fileName'] + '/pages.json')
-
-    book_path = downloadPages(response_json, book['fileName'])
+    book_path = downloadPages(book['fileName'])
     parsePages(book_path, starter_word_count, closer_word_count, common_word_count)
     parseCounter(starter_word_count, common_word_count.most_common(COMMON_WORDS_DELETE))
     parseCounter(closer_word_count, common_word_count.most_common(COMMON_WORDS_DELETE))
 
     books_dict[book['fileName']] = {
-        'starter_most_common': starter_word_count.most_common(COUNTED_WORD_DISPLAY),
-        'closer_most_common': closer_word_count.most_common(COUNTED_WORD_DISPLAY)
+        'starter_most_common': dict(starter_word_count.most_common(COUNTED_WORD_DISPLAY)),
+        'closer_most_common': dict(closer_word_count.most_common(COUNTED_WORD_DISPLAY))
     }
 
 
@@ -75,9 +75,9 @@ def getPagesFile(file_url):
         return None
 
 
-def downloadPages(response_json, book_file_name):
-
-    extract_to = store_file_path + book_file_name
+def downloadPages(book_file_name):
+    response_json = getPagesFile('https://files.dicta.org.il/' + book_file_name + '/pages.json')
+    extract_to = STORE_FILE_PATH + book_file_name
 
     # Create a directory for extraction
     if not os.path.exists(extract_to):
@@ -88,12 +88,12 @@ def downloadPages(response_json, book_file_name):
         if page['fileName'].endswith('.html'):
             continue
         filename = page['fileName']
-        file_url = 'https://files.dicta.org.il/' + book['fileName'] + '/' + filename
-        file_path = download_path + filename
-       # print(file_path)
+        file_url = 'https://files.dicta.org.il/' + book_file_name + '/' + filename
+        file_path = DOWNLOAD_PATH + filename
+
         file_json = re.sub('zip$', 'json', filename)
-        path_json = store_file_path + book['fileName'] + '/' + file_json
-       # print(path_json)
+        path_json = STORE_FILE_PATH + book_file_name + '/' + file_json
+
         # Check if the file already exists
         if os.path.exists(path_json):
             downloaded = True
@@ -133,6 +133,7 @@ def parsePages(book_path, starter_word_count, closer_word_count, common_word_cou
             parsePage(file_path, starter_word_count, closer_word_count, common_word_count)
     print('parsing completed successfully!')
 
+
 def newPage(response_json, page_name):
     found_file = False
     for page in response_json:
@@ -143,7 +144,7 @@ def newPage(response_json, page_name):
     if not found_file:
         print("Page not found")
         exit(1)
-    file_path = download_path + filename
+    file_path = DOWNLOAD_PATH + filename
     webbrowser.open('https://files.dicta.org.il/prietshaim/' + filename)
 
     # waiting for download to complete
@@ -187,8 +188,8 @@ def parsePage(page_file, starter_word_count, closer_word_count, common_word_coun
                 updateCounter(starter_word_count, words, i)
 
             # skip over parallelID
-            while (parallelID == token['sourcesPostProcessedIDs']):
-                if (i + 1 >= len(words['tokens'])):
+            while parallelID == token['sourcesPostProcessedIDs']:
+                if i + 1 >= len(words['tokens']):
                     break
                 i += 1
                 token = words['tokens'][i]
@@ -227,24 +228,23 @@ def parseCounter(word_counter, common_words):
         del word_counter[word]
 
 
+def main():
+    # open books json file
+    try:
+        with open('test.json', 'r', encoding='utf-8') as file:
+            books = json.load(file)
+            for book in books:
+                # initialize the counters
+                parseBook(book)
 
-# open books json file
-try:
-    with open('test.json', 'r', encoding='utf-8') as file:
-        books = json.load(file)
-        for book in books:
-            # initialize the counters
-            starter_word_count = Counter()
-            closer_word_count = Counter()
-            parseBook(book, starter_word_count, closer_word_count)
+        # Write the most common words to a JSON file
+        with open('results.json', 'w', encoding='utf-8') as file:
+            json.dump(books_dict, file)
+        print(books_dict)
 
-    #output_dir = 'results'
-    # Check if output directory exists, create it if it doesn't
-    #if not os.path.exists(output_dir):
-     #   os.makedirs(output_dir)
-    print(books_dict)
+    except FileNotFoundError:
+        print(f"File not found")
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON from books.json: {e}")
 
-except FileNotFoundError:
-    print(f"File not found")
-except json.JSONDecodeError as e:
-    print(f"Error decoding JSON from books.json: {e}")
+main()
