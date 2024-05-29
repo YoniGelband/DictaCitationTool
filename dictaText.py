@@ -289,6 +289,7 @@ def main():
             with open('results.json', 'w', encoding='utf-8') as file:
                 json.dump(books_dict, file, ensure_ascii=False, indent=4)
         else:
+            #update json instead of overwritting
             with open('results.json', 'w', encoding='utf-8') as file:
                 res.update(books_dict)
                 json.dump(res, file, ensure_ascii=False, indent=4)
