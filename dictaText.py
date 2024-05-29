@@ -19,23 +19,24 @@ END_INDEX = config.getint('indexes', 'END_INDEX')
 COMMON_WORDS_DELETE = config.getint('indexes', 'COMMON_WORDS_DELETE')
 COUNTED_WORD_DISPLAY = config.getint('indexes', 'COUNTED_WORD_DISPLAY')
 
-# initialize counter dictionary
-books_dict = {}
-common_word_count = Counter()
-
 
 def parseBook(book):
     starter_word_count = Counter()
     closer_word_count = Counter()
     common_word_count = Counter()
 
+    if not os.path.exists(STORE_FILE_PATH + book['fileName']):
+        book_path = downloadPages(book['fileName'])
+    else:
+        book_path = STORE_FILE_PATH + book['fileName']
+        print(f"Skipping {book['fileName']}, already downloaded")
+
     # get json pages file
-    book_path = downloadPages(book['fileName'])
     parsePages(book_path, starter_word_count, closer_word_count, common_word_count)
     parseCounter(starter_word_count, common_word_count.most_common(COMMON_WORDS_DELETE))
     parseCounter(closer_word_count, common_word_count.most_common(COMMON_WORDS_DELETE))
 
-    books_dict[book['fileName']] = {
+    return {
         'starter_most_common': dict(starter_word_count.most_common(COUNTED_WORD_DISPLAY)),
         'closer_most_common': dict(closer_word_count.most_common(COUNTED_WORD_DISPLAY))
     }
@@ -203,9 +204,38 @@ def parsePage(page_file, starter_word_count, closer_word_count, common_word_coun
         i += 1
 
 
+def createString(words, x):
+    global START_INDEX, END_INDEX
+    if x < 10:
+        START_INDEX = 0
+        END_INDEX = 20 - (10 - x)
+    elif x + 11 >= len(words['tokens']):
+        END_INDEX = len(words['tokens']) - x - 1
+
+    string = ''
+    for j in range(START_INDEX, END_INDEX):
+        if (x + j < len(words['tokens'])):
+            if words['tokens'][x + j]['str'] != ' ':
+                if words['tokens'][x + j]['str'] == 'עכ"ל':
+                    string += '[MASK]'
+                    continue
+                string += words['tokens'][x + j]['str'] + ' '
+    return string
+
+
+def applyBert(string):
+    berel_url = "http://54.213.196.28:8080/api"
+    model = "ckpt_34800"
+
+    body = {"data": string, "models": [model]}
+    res = requests.post(berel_url, json=body)
+    options = res.json()
+    # options = [r[model] for r in options if r][0]
+    print(options)
+
+
 def updateCounter(word_counter, words, x):
     global START_INDEX, END_INDEX
-
     if x < 10:
         START_INDEX = 0
         END_INDEX = 20 - (10 - x)
@@ -216,6 +246,10 @@ def updateCounter(word_counter, words, x):
         if (x + j < len(words['tokens'])):
             if words['tokens'][x + j]['str'] != ' ':
                 word = words['tokens'][x + j]['str']
+                # Bert option 1: find the common words while parsing
+                # (create a string builder function and pass the string to bert)
+                # Bert option 2: find the common words after parsing, itterate through the entire book
+                # each time the word is encountered, fire a function to build a string and send it to burt
                 word_counter[word] += 1
 
 
@@ -229,22 +263,41 @@ def parseCounter(word_counter, common_words):
 
 
 def main():
+    # initialize the dictionary
+    books_dict = {}
+    results_bool = False
+
+    if os.path.exists('results.json'):
+        results_bool = True
+        with open('results.json', 'r', encoding='utf-8') as results:
+            res = json.load(results)
     # open books json file
     try:
         with open('test.json', 'r', encoding='utf-8') as file:
             books = json.load(file)
             for book in books:
-                # initialize the counters
-                parseBook(book)
+                if results_bool:
+                    if (book['fileName'] in res):
+                        print(f"Skipping {book['fileName']}, already processed")
+                        continue
+
+                # update dictionary with the book's most common words
+                books_dict[book['fileName']] = parseBook(book)
 
         # Write the most common words to a JSON file
-        with open('results.json', 'w', encoding='utf-8') as file:
-            json.dump(books_dict, file)
-        print(books_dict)
+        if not results_bool:
+            with open('results.json', 'w', encoding='utf-8') as file:
+                json.dump(books_dict, file, ensure_ascii=False, indent=4)
+        else:
+            with open('results.json', 'w', encoding='utf-8') as file:
+                res.update(books_dict)
+                json.dump(res, file, ensure_ascii=False, indent=4)
+        print('program complete, look for the results.json file')
 
     except FileNotFoundError:
         print(f"File not found")
     except json.JSONDecodeError as e:
         print(f"Error decoding JSON from books.json: {e}")
+
 
 main()
