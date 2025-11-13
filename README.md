@@ -1,6 +1,6 @@
 # Dicta Text Processing Project
 
-This project aimsto find the start and end to citations in rabbincal text books. 
+This project aims to find the start and end to citations in rabbincal text books. 
 
 ## Setup
 
